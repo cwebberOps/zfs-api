@@ -5,7 +5,13 @@ require 'sinatra'
 require 'base64'
 require 'json'
 
+ZFSGET = '/usr/sbin/zfs get -Hp'
+
 perms = 'unauthorized'
+
+permitted_zpools = [
+ 'pool0',
+]
 
 rw_keys = [
   'uamV3xkCVr22yzTqphrtZUGc',
@@ -50,7 +56,27 @@ end
 get '/zfs/:fs' do
 
   fs = Base64.decode64(params[:fs])
-  data = {"fs" => fs, "quota" => 40}
+
+  # Sanitization code goes here...
+
+  zpool = fs.split('/')[0]
+
+  # Verify that we can operate on this pool at all
+  unless permitted_zpools.include?(zpool)
+    error 403
+  end
+
+  raw_data = `#{ZFSGET} all #{fs}`
+  unless $?.to_i == 0
+    error 404
+  end
+
+  data = {}
+  raw_data.each_line do |line|
+    property = line.split()
+    data[property[1]] = {"value" => property[2], "source" => property[3]}
+  end
+
   puts "Filesystem: #{fs}"
   status 200
   body(data.to_json)
