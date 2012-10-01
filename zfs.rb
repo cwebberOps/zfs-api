@@ -13,6 +13,10 @@ permitted_zpools = [
  'pool0',
 ]
 
+permitted_options = [
+  'quota',
+]
+
 rw_keys = [
   'uamV3xkCVr22yzTqphrtZUGc',
   'ZxWekUAvU3NVHfuyHmLWcqGk',
@@ -92,9 +96,33 @@ put '/zfs' do
     if req.nil?
       status 400
     else
-      # Do stuff
-      status 200
-      body(req.to_json)
+
+      fs = req['fs']
+
+      # verify that we can work on this zpool
+      zpool = fs.split('/')[0]
+      unless permitted_zpools.include?(zpool)
+        error 403
+      end
+
+      # Handle the options
+      options = ''
+      if req['options']
+        req['options'].each_key do |opt|
+          unless permitted_options.include?(opt)
+            error 403
+          end
+          options << "-o #{opt}=#{req['options'][opt]}"
+        end
+      end
+
+      `/usr/sbin/zfs create #{options} #{fs}`
+      if $? == 0
+        status 200
+        body(req.to_json)
+      else
+        error 500
+      end
     end
   else
     error 401
@@ -105,7 +133,18 @@ end
 delete '/zfs/:fs' do
   if perms == 'rw'
     fs = Base64.decode64(params[:fs])
-    status 200
+    # verify that we can work on this zpool
+    zpool = fs.split('/')[0]
+    unless permitted_zpools.include?(zpool)
+      error 403
+    end
+
+    `/usr/sbin/zfs destroy #{fs}`
+    if $?.to_i == 0
+      status 200
+    else
+      status 500
+    end
   else
     error 401
   end
