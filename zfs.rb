@@ -154,18 +154,38 @@ end
 #
 # Returns:
 #   zfs properties
-post '/zfs/:fs' do
+post '/zfs/:fs/:option' do
   if perms == 'rw'
     req = JSON.parse(request.body.string)
     if req.nil?
       status 400
     else
-      # Do stuff
-      status 200
-      body(req.to_json)
+
+      fs = Base64.decode64(params[:fs])
+      opt = params[:option]
+
+      # verify that we can work on this zpool
+      zpool = fs.split('/')[0]
+      unless permitted_zpools.include?(zpool)
+        puts "Cannot operate on zpool"
+        error 403
+      end
+
+      # Handle the options
+
+      unless permitted_options.include?(opt)
+        puts "#{opt} is not a valid option"
+        error 403
+      end
+
+      `/usr/sbin/zfs set #{opt}=#{req['value']} #{fs}`
+      if $? == 0
+        status 200
+      else
+        error 500
+      end
     end
   else
     error 401
   end
 end
-
