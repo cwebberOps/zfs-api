@@ -4,6 +4,7 @@ require 'rubygems'
 require 'sinatra'
 require 'base64'
 require 'json'
+require 'fileutils'
 
 ZFSGET = '/usr/sbin/zfs get -Hp'
 
@@ -144,6 +145,53 @@ delete '/zfs/:fs' do
       status 200
     else
       status 500
+    end
+  else
+    error 401
+  end
+end
+
+post '/zfs/:fs/chown' do
+  if perms == 'rw'
+    req = JSON.parse(request.body.string)
+    if req.nil?
+      status 400
+    else
+
+      fs = Base64.decode64(params[:fs])
+      opt = params[:option]
+
+      # verify that we can work on this zpool
+      zpool = fs.split('/')[0]
+      unless permitted_zpools.include?(zpool)
+        puts "Cannot operate on zpool"
+        error 403
+      end
+
+      # Handle the options
+      if req['user']
+        user = req['user']
+      else
+        user = nil
+      end
+
+      if req['group']
+        group = req['group']
+      else
+        group = nil
+      end
+
+      mountpoint = `/usr/sbin/zfs get -H -o value mountpoint #{fs}`.strip
+      unless $? == 0
+        error 500
+      end
+
+      if FileUtils.chown user, group, mountpoint
+        status 200
+      else
+        error 500
+      end
+
     end
   else
     error 401
